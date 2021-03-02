@@ -70,21 +70,33 @@ export class InfiniteCache extends BeanStub {
     // it will want new pages in the cache as it asks for rows. only when we are inserting /
     // removing rows via the api is dontCreatePage set, where we move rows between the pages.
     public getRow(rowIndex: number, dontCreatePage = false): RowNode | null {
-        const blockId = Math.floor(rowIndex / this.params.blockSize!);
+        let blockId = 0;
+        let max = 0;
+        const blocksInOrder = this.getBlocksInOrder()
+        blocksInOrder.forEach((block) =>{
+            const endRow =  block.getEndRow();
+            if(rowIndex < endRow && rowIndex >= block.getStartRow()){
+                blockId = block.getId();
+            }
+            max = (endRow > max) ? endRow : max
+        } )
+        if (rowIndex >= max && max != 0) {
+            blockId = blocksInOrder[blocksInOrder.length -1].getId() + 1
+        }
         let block = this.blocks[blockId];
-
         if (!block) {
             if (dontCreatePage) {
                 return null;
             }
             block = this.createBlock(blockId);
         }
-
         return block.getRow(rowIndex);
     }
 
     private createBlock(blockNumber: number): InfiniteBlock {
-        const newBlock = this.createBean(new InfiniteBlock(blockNumber, this, this.params));
+        const lastBlock = this.getBlocksInOrder()[this.getBlocksInOrder().length-1]
+        const startRow = lastBlock ? lastBlock.getEndRow() : 0;
+        const newBlock = this.createBean(new InfiniteBlock(blockNumber, this, this.params, startRow));
 
         this.blocks[newBlock.getId()] = newBlock;
         this.blockCount++;
@@ -207,7 +219,7 @@ export class InfiniteCache extends BeanStub {
             this.lastRowIndexKnown = true
         } else if (!this.lastRowIndexKnown) {
             // otherwise, see if we need to add some virtual rows
-            const lastRowIndex = (block.getId() + 1) * this.params.blockSize!;
+            const lastRowIndex = block.getEndRow();
             const lastRowIndexPlusOverflow = lastRowIndex + this.params.overflowSize;
 
             if (this.rowCount < lastRowIndexPlusOverflow) {
@@ -281,7 +293,7 @@ export class InfiniteCache extends BeanStub {
     private destroyAllBlocksPastVirtualRowCount(): void {
         const blocksToDestroy: InfiniteBlock[] = [];
         this.getBlocksInOrder().forEach(block => {
-            const startRow = block.getId() * this.params.blockSize!;
+            const startRow = block.getStartRow();
             if (startRow >= this.rowCount) {
                 blocksToDestroy.push(block);
             }

@@ -16,8 +16,8 @@ export class InfiniteBlock extends RowNodeBlock {
 
     @Autowired('rowRenderer') private rowRenderer: RowRenderer;
 
-    private readonly startRow: number;
-    private readonly endRow: number;
+    private startRow: number;
+    private endRow: number;
     private readonly parentCache: InfiniteCache;
 
     private params: InfiniteCacheParams;
@@ -26,15 +26,13 @@ export class InfiniteBlock extends RowNodeBlock {
 
     public rowNodes: RowNode[];
 
-    constructor(id: number, parentCache: InfiniteCache, params: InfiniteCacheParams) {
+    constructor(id: number, parentCache: InfiniteCache, params: InfiniteCacheParams, startRow: number) {
         super(id);
-
         this.parentCache = parentCache;
         this.params = params;
-
         // we don't need to calculate these now, as the inputs don't change,
         // however it makes the code easier to read if we work them out up front
-        this.startRow = id * params.blockSize!;
+        this.startRow = startRow;
         this.endRow = this.startRow + params.blockSize!;
     }
 
@@ -151,7 +149,18 @@ export class InfiniteBlock extends RowNodeBlock {
 
     protected processServerResult(params: LoadSuccessParams): void {
         const rowNodesToRefresh: RowNode[] = [];
-
+        const rowCount = params.rowData.length;
+        this.endRow = this.startRow + rowCount;
+        for (let i = this.params.blockSize!; i < rowCount; i++) {
+            const rowIndex = this.startRow + i;
+            const rowNode = this.getContext().createBean(new RowNode());
+            rowNode.setRowHeight(this.params.rowHeight);
+            rowNode.uiLevel = 0;
+            rowNode.setRowIndex(rowIndex);
+            rowNode.setRowTop(this.params.rowHeight * rowIndex);
+            this.rowNodes.push(rowNode);
+            console.log(i)
+        }
         this.rowNodes.forEach((rowNode: RowNode, index: number) => {
             const data = params.rowData ? params.rowData[index] : undefined;
             if (rowNode.stub) {
